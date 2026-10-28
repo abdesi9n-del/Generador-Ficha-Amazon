@@ -158,8 +158,13 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
         }),
       });
 
-      const data = await res.json();
-      if (data.success) {
+      const text = await res.text();
+      let data: any = null;
+      if (text && (text.trim().startsWith('{') || text.trim().startsWith('['))) {
+        data = JSON.parse(text);
+      }
+
+      if (data && data.success) {
         onUpdateProduct({
           ...product,
           technicalSpecs: data.specs || product.technicalSpecs,
@@ -168,7 +173,7 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
         });
       }
     } catch (err) {
-      console.error('Error organizing with AI:', err);
+      console.warn('AI spec organization skipped or unavailable:', err);
     } finally {
       setIsOrganizingAi(false);
     }

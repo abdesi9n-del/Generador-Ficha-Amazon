@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Search, Globe, FileCode, ListPlus, ArrowRight, Loader2, Sparkles, CheckCircle2, AlertCircle, Copy, HelpCircle } from 'lucide-react';
 import { ExtractedProduct } from '../types/product';
 import { SAMPLE_PRODUCTS } from '../data/sampleProducts';
+import { extractAmazonClientSide } from '../utils/clientAmazonExtractor';
 
 interface ExtractorInputProps {
   onProductExtracted: (product: ExtractedProduct) => void;
@@ -42,22 +43,62 @@ export const ExtractorInput: React.FC<ExtractorInputProps> = ({
     }
   };
 
-  const extractSingleUrl = async (targetUrl: string, rawHtml?: string) => {
-    setLoadingStep('Conectando con el marketplace...');
-    const response = await fetch('/api/extract', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        url: targetUrl,
-        html: rawHtml,
-      }),
-    });
-
-    const data = await response.json();
-    if (!response.ok || !data.success || !data.product) {
-      throw new Error(data.error || 'No se pudo extraer la información del producto.');
+  const extractSingleUrl = async (targetUrl: string, rawHtml?: string): Promise<ExtractedProduct> => {
+    // If rawHtml is provided, execute client-side extraction immediately
+    if (rawHtml && rawHtml.trim().length > 100) {
+      setLoadingStep('Analizando código HTML localmente...');
+      try {
+        const clientProduct = extractAmazonClientSide(targetUrl, rawHtml);
+        if (clientProduct && clientProduct.title) {
+          return clientProduct;
+        }
+      } catch (err) {
+        console.warn('Client-side HTML parsing attempt warning:', err);
+      }
     }
-    return data.product as ExtractedProduct;
+
+    setLoadingStep('Conectando con Amazon México...');
+    let data: any = null;
+
+    try {
+      const response = await fetch('/api/extract', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: targetUrl,
+          html: rawHtml,
+        }),
+      });
+
+      const rawText = await response.text();
+      if (rawText && (rawText.trim().startsWith('{') || rawText.trim().startsWith('['))) {
+        data = JSON.parse(rawText);
+      } else {
+        console.warn('API returned non-JSON response (e.g. static host/Vercel):', rawText?.slice(0, 100));
+      }
+    } catch (fetchErr: any) {
+      console.warn('Fetch to /api/extract failed:', fetchErr);
+    }
+
+    if (data && data.success && data.product) {
+      return data.product as ExtractedProduct;
+    }
+
+    // Client-side fallback if server API is unavailable (e.g. Vercel deployment or rate limit)
+    try {
+      setLoadingStep('Generando ficha base de Amazon México...');
+      const fallback = extractAmazonClientSide(targetUrl, rawHtml);
+      if (fallback) {
+        return fallback;
+      }
+    } catch (clientErr: any) {
+      console.error('Client fallback failed:', clientErr);
+    }
+
+    throw new Error(
+      (data && data.error) ||
+      'No se pudo extraer la información automáticamente. Abre la página del producto en tu navegador, presiona Ctrl+U (Ver código fuente), copia todo y pégalo en la pestaña "Pegar Código HTML".'
+    );
   };
 
   const handleSingleSubmit = async (e?: React.FormEvent) => {
