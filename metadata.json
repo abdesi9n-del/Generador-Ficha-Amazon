@@ -1,0 +1,6 @@
+{
+  "name": "Extractor de Fichas de Producto - Amazon & Mercado Libre México",
+  "description": "Extractor profesional de fichas técnicas, fotos en alta resolución, precios y especificaciones de Amazon MX y Mercado Libre MX exportable a Excel sin APIs.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
